@@ -1,35 +1,51 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React, { useState, useMemo } from "react";
+import { Canvas } from "@react-three/fiber";
+import { IntersectionScene } from "./components/IntersectionScene";
+import { ConfigPanel } from "./ui/ConfigPanel";
+import { TrafficEngine } from "./simulation/TrafficEngine";
+import type { SimConfig } from "./types/SceneTypes";
+import { LidarLegend } from "./ui/LidarLegend";
 
-function App() {
-  const [count, setCount] = useState(0)
+const DEFAULT_CONFIG: SimConfig = {
+	trafficDensity: 0.5,
+	speedMultiplier: 1.0,
+	pedestrianEnabled: true,
+	bicycleEnabled: true,
+	lidarEnabled: false,
+};
 
-  return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
-}
+export const App: React.FC = () => {
+	const [config, setConfig] = useState<SimConfig>(DEFAULT_CONFIG);
 
-export default App
+	// Initialize engine once
+	const engine = useMemo(() => new TrafficEngine(256), []);
+
+	const handleConfigChange = (newConfig: Partial<SimConfig>) => {
+		setConfig((prev) => ({ ...prev, ...newConfig }));
+	};
+
+	return (
+		<div style={{ display: "flex", height: "100vh", width: "100vw" }}>
+			{/* Left: Config panel */}
+			<div
+				style={{
+					width: 280, // Slightly wider panel
+					backgroundColor: "#1f1f1f",
+					color: "#fff",
+				}}
+			>
+				<ConfigPanel config={config} onChange={handleConfigChange} />
+			</div>
+
+			{/* Right: 3D Canvas */}
+			<div style={{ flex: 1 }}>
+				<Canvas camera={{ position: [20, 30, 20], fov: 60 }}>
+					<ambientLight intensity={0.4} />
+					<directionalLight position={[20, 40, 20]} intensity={0.8} />
+					<IntersectionScene engine={engine} config={config} />
+				</Canvas>
+				{config.lidarEnabled && <LidarLegend />}
+			</div>
+		</div>
+	);
+};
