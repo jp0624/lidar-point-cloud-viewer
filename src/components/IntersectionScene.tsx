@@ -1,21 +1,25 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { OrbitControls } from "@react-three/drei";
 import { TrafficEngine } from "../simulation/TrafficEngine";
 import type { SimConfig } from "../types/SceneTypes";
 import { useTrafficSimulation } from "../hooks/useTrafficSimulation";
 import { Vehicle } from "./Vehicle";
 import { LidarPoints } from "./LidarPoints";
-import * as THREE from "three";
 
 interface IntersectionSceneProps {
 	engine: TrafficEngine;
 	config: SimConfig;
 }
 
+// Dimensions tuned to match TrafficEngine PATHS:
+// - Lanes centered roughly at x/z = ±0.5 and ±1.5
+// - Roads extend from -24 to +24 units
+// - Sidewalks + bike lanes sit just outside the road
 const RoadDimensions = {
-	ROAD_SIZE: 40,
-	LANE_WIDTH: 4,
-	SIDEWALK_WIDTH: 3,
+	EXTENT: 24,
+	ROAD_HALF_WIDTH: 3.5, // covers 4 lanes (±1.5, ±0.5)
+	SIDEWALK_WIDTH: 1.5,
+	BIKE_LANE_WIDTH: 0.8,
 };
 
 export const IntersectionScene: React.FC<IntersectionSceneProps> = ({
@@ -30,90 +34,135 @@ export const IntersectionScene: React.FC<IntersectionSceneProps> = ({
 		red: "#ff0000",
 	};
 
-	// Renders static scene elements (road, sidewalk, markings)
-	const StaticScene = () => (
-		<group>
-			{/* Road (dark gray) */}
-			<mesh position={[0, -0.05, 0]}>
-				<boxGeometry
-					args={[RoadDimensions.ROAD_SIZE, 0.01, RoadDimensions.ROAD_SIZE]}
-				/>
-				<meshStandardMaterial color="#333333" />
-			</mesh>
+	// Static geometry: cross roads, sidewalks, and bike lanes
+	const StaticScene: React.FC = () => {
+		const { EXTENT, ROAD_HALF_WIDTH, SIDEWALK_WIDTH, BIKE_LANE_WIDTH } =
+			RoadDimensions;
 
-			{/* Pedestrian Crosswalk Markings (White stripes) - simplified */}
-			{[
-				[0, 10, 0], // North
-				[0, -10, 0], // South
-				[10, 0, Math.PI / 2], // East
-				[-10, 0, Math.PI / 2], // West
-			].map(([x, z, rotationZ], index) => (
-				<mesh
-					key={index}
-					position={[x, 0, z]}
-					rotation={[-Math.PI / 2, 0, rotationZ]}
-				>
-					<planeGeometry args={[RoadDimensions.ROAD_SIZE / 2, 2]} />
-					<meshBasicMaterial color="#ffffff" transparent opacity={0.5} />
-				</mesh>
-			))}
-		</group>
-	);
+		const sidewalkOffset = ROAD_HALF_WIDTH + SIDEWALK_WIDTH / 2;
+		const bikeOffset = ROAD_HALF_WIDTH - BIKE_LANE_WIDTH / 2;
 
-	// Simple 3D Traffic Light Visualizer
-	const TrafficLight = ({
-		position,
-		phase,
-	}: {
-		position: [number, number, number];
-		phase: string;
-	}) => {
-		const color = lightStateColor[phase];
 		return (
-			<group position={position}>
-				<mesh position={[0, 1, 0]}>
-					<boxGeometry args={[0.2, 2, 0.2]} />
-					<meshStandardMaterial color="gray" />
+			<group>
+				{/* Vertical road (NS / SN) */}
+				<mesh position={[0, -0.05, 0]}>
+					<boxGeometry args={[ROAD_HALF_WIDTH * 2, 0.1, EXTENT * 2]} />
+					<meshStandardMaterial color="#2b2b2b" />
 				</mesh>
-				<mesh position={[0, 2, 0]}>
-					<sphereGeometry args={[0.3, 16, 16]} />
-					{/* Use emissive for glow effect */}
-					<meshBasicMaterial color={color} emissive={color} />
+
+				{/* Horizontal road (EW / WE) */}
+				<mesh position={[0, -0.05, 0]}>
+					<boxGeometry args={[EXTENT * 2, 0.1, ROAD_HALF_WIDTH * 2]} />
+					<meshStandardMaterial color="#2b2b2b" />
+				</mesh>
+
+				{/* Sidewalks - four strips around the roads */}
+				{/* North sidewalk (along +Z) */}
+				<mesh position={[0, 0, sidewalkOffset]}>
+					<boxGeometry args={[EXTENT * 2, 0.1, SIDEWALK_WIDTH]} />
+					<meshStandardMaterial color="#777777" />
+				</mesh>
+				{/* South sidewalk (along -Z) */}
+				<mesh position={[0, 0, -sidewalkOffset]}>
+					<boxGeometry args={[EXTENT * 2, 0.1, SIDEWALK_WIDTH]} />
+					<meshStandardMaterial color="#777777" />
+				</mesh>
+				{/* East sidewalk (along +X) */}
+				<mesh position={[sidewalkOffset, 0, 0]}>
+					<boxGeometry args={[SIDEWALK_WIDTH, 0.1, EXTENT * 2]} />
+					<meshStandardMaterial color="#777777" />
+				</mesh>
+				{/* West sidewalk (along -X) */}
+				<mesh position={[-sidewalkOffset, 0, 0]}>
+					<boxGeometry args={[SIDEWALK_WIDTH, 0.1, EXTENT * 2]} />
+					<meshStandardMaterial color="#777777" />
+				</mesh>
+
+				{/* Bike lanes (green) between road and sidewalk */}
+				{/* NS bike lanes (parallel to Z axis) */}
+				<mesh position={[0, 0.01, bikeOffset]}>
+					<boxGeometry args={[EXTENT * 2, 0.05, BIKE_LANE_WIDTH]} />
+					<meshStandardMaterial color="#1aff1a" />
+				</mesh>
+				<mesh position={[0, 0.01, -bikeOffset]}>
+					<boxGeometry args={[EXTENT * 2, 0.05, BIKE_LANE_WIDTH]} />
+					<meshStandardMaterial color="#1aff1a" />
+				</mesh>
+				{/* EW bike lanes (parallel to X axis) */}
+				<mesh position={[bikeOffset, 0.01, 0]}>
+					<boxGeometry args={[BIKE_LANE_WIDTH, 0.05, EXTENT * 2]} />
+					<meshStandardMaterial color="#1aff1a" />
+				</mesh>
+				<mesh position={[-bikeOffset, 0.01, 0]}>
+					<boxGeometry args={[BIKE_LANE_WIDTH, 0.05, EXTENT * 2]} />
+					<meshStandardMaterial color="#1aff1a" />
 				</mesh>
 			</group>
 		);
 	};
 
+	// Simple 3D traffic light
+	const TrafficLight: React.FC<{
+		position: [number, number, number];
+		phase: string;
+	}> = ({ position, phase }) => {
+		const color = lightStateColor[phase] ?? "#ff0000";
+
+		return (
+			<group position={position}>
+				{/* Pole */}
+				<mesh position={[0, 1, 0]}>
+					<boxGeometry args={[0.2, 2, 0.2]} />
+					<meshStandardMaterial color="#555555" />
+				</mesh>
+				{/* Light head */}
+				<mesh position={[0, 2.2, 0]}>
+					<sphereGeometry args={[0.35, 16, 16]} />
+					<meshStandardMaterial emissive={color} color={color} />
+				</mesh>
+			</group>
+		);
+	};
+
+	const { ROAD_HALF_WIDTH, SIDEWALK_WIDTH } = RoadDimensions;
+	// Place lights just outside the sidewalks, at the corners where lanes enter the intersection
+	const lightCornerOffset = ROAD_HALF_WIDTH + SIDEWALK_WIDTH + 0.5;
+
 	return (
 		<>
-			{/* Drei OrbitControls is the R3F way to manage camera */}
-			<OrbitControls enableDamping dampingFactor={0.1} target={[0, 0, 0]} />
+			{/* Camera controls */}
+			<OrbitControls enableDamping dampingFactor={0.08} />
 
+			{/* Static environment */}
 			<StaticScene />
 
-			{/* Render Vehicles and Entities */}
+			{/* LIDAR point cloud */}
+			{config.lidarEnabled && (
+				<LidarPoints entities={entities} enabled={true} />
+			)}
+
+			{/* Dynamic entities: Cars, Trucks, Bicycles, Pedestrians */}
 			{entities.map((entity) => (
 				<Vehicle key={entity.id} entity={entity} />
 			))}
 
-			{/* Render Lidar Points - Only when enabled in config */}
-			<LidarPoints entities={entities} enabled={config.lidarEnabled} />
+			{/* NS-controlled lights (diagonal corners for NS approaches) */}
+			<TrafficLight
+				position={[lightCornerOffset, 0, lightCornerOffset]}
+				phase={trafficLightPhases.NS}
+			/>
+			<TrafficLight
+				position={[-lightCornerOffset, 0, -lightCornerOffset]}
+				phase={trafficLightPhases.NS}
+			/>
 
-			{/* Render Traffic Lights (Simplified placements) */}
+			{/* EW-controlled lights (other two corners) */}
 			<TrafficLight
-				position={[3, 0, 20]} // NS side
-				phase={trafficLightPhases.NS}
-			/>
-			<TrafficLight
-				position={[-3, 0, -20]} // SN side
-				phase={trafficLightPhases.NS}
-			/>
-			<TrafficLight
-				position={[20, 0, -3]} // EW side
+				position={[lightCornerOffset, 0, -lightCornerOffset]}
 				phase={trafficLightPhases.EW}
 			/>
 			<TrafficLight
-				position={[-20, 0, 3]} // WE side
+				position={[-lightCornerOffset, 0, lightCornerOffset]}
 				phase={trafficLightPhases.EW}
 			/>
 		</>
