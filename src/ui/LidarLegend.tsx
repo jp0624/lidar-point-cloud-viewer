@@ -1,51 +1,45 @@
+// src/ui/LidarLegend.tsx
 import React from "react";
 
-// Simplified type based on TrafficEngine EntityType for display purposes
-type DisplayEntityType = "Car" | "Truck" | "Bicycle" | "Pedestrian";
-
-const entityColors: Record<DisplayEntityType, string> = {
-	Car: "#ff5555",
-	Truck: "#ffff55",
-	Bicycle: "#00ff00",
-	Pedestrian: "#ff55ff",
-};
-
 export const LidarLegend: React.FC = () => {
-	const entityEntries = Object.entries(entityColors) as [
-		DisplayEntityType,
-		string
-	][];
+	const entries = [
+		{ label: "Car", color: "#ff5555" },
+		{ label: "Truck", color: "#5555ff" },
+		{ label: "Bicycle", color: "#00ff00" },
+		{ label: "Pedestrian", color: "#ffff00" },
+	];
 
 	return (
 		<div
 			style={{
-				position: "absolute",
-				bottom: 20,
-				left: 20,
-				backgroundColor: "rgba(0,0,0,0.6)",
+				backgroundColor: "rgba(0,0,0,0.65)",
 				padding: "8px 12px",
 				borderRadius: 6,
 				color: "white",
-				fontSize: 14,
-				zIndex: 20,
+				fontSize: 13,
+				fontFamily: "system-ui, sans-serif",
 			}}
 		>
-			<h4 style={{ margin: "0 0 6px 0" }}>Entity Legend (LIDAR)</h4>
-			{entityEntries.map(([name, color]) => (
+			<div style={{ fontWeight: 600, marginBottom: 4 }}>LIDAR Legend</div>
+			{entries.map((e) => (
 				<div
-					key={name}
-					style={{ display: "flex", alignItems: "center", marginBottom: 4 }}
+					key={e.label}
+					style={{
+						display: "flex",
+						alignItems: "center",
+						marginBottom: 2,
+					}}
 				>
 					<div
 						style={{
-							width: 16,
-							height: 16,
-							backgroundColor: color,
-							borderRadius: 4,
-							marginRight: 8,
+							width: 14,
+							height: 14,
+							borderRadius: 3,
+							backgroundColor: e.color,
+							marginRight: 6,
 						}}
 					/>
-					<span>{name}</span>
+					<span>{e.label}</span>
 				</div>
 			))}
 		</div>

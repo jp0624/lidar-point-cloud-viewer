@@ -1,14 +1,19 @@
+// src/hooks/useTrafficSimulation.ts
 import { useFrame } from "@react-three/fiber";
 import { useRef, useState, useEffect } from "react";
-import { TrafficEngine } from "../simulation/TrafficEngine";
-import type { Entity } from "../simulation/TrafficEngine";
+import type { TrafficEngine, Entity } from "../simulation/TrafficEngine";
 import { TrafficLights } from "../simulation/TrafficLights";
 import type { SimConfig } from "../types/SceneTypes";
 import * as THREE from "three";
 
 export interface SimulationState {
 	entities: Entity[];
-	trafficLightPhases: { NS: string; EW: string; countdown: number };
+	trafficLightPhases: {
+		NS: { straight: string; left: string; right: string };
+		EW: { straight: string; left: string; right: string };
+		ped: { acrossNS: "walk" | "stop"; acrossEW: "walk" | "stop" };
+		countdown: number;
+	};
 }
 
 export function useTrafficSimulation(
@@ -17,45 +22,41 @@ export function useTrafficSimulation(
 ): SimulationState {
 	const [state, setState] = useState<SimulationState>({
 		entities: [],
-		trafficLightPhases: { NS: "green", EW: "red", countdown: 0 },
+		trafficLightPhases: {
+			NS: { straight: "red", left: "red", right: "red" },
+			EW: { straight: "red", left: "red", right: "red" },
+			ped: { acrossNS: "stop", acrossEW: "stop" },
+			countdown: 0,
+		},
 	});
 
 	const clockRef = useRef(new THREE.Clock());
-	const trafficLightsRef = useRef(new TrafficLights());
+	const lightsRef = useRef(new TrafficLights());
 
-	// Initial population & density control
+	// Repopulate when config changes
 	useEffect(() => {
-		const vehicleTypes = ["Car", "Truck"];
-		const pedestrianTypes = ["Pedestrian", "Bicycle"];
-
-		// FIX: engine.getMaxEntities() does NOT exist → use getPool().length
-		const maxEntityCount = engine.getPool().length;
-		const maxVehicleCount = Math.floor(maxEntityCount * 0.8);
-
-		const targetVehicleCount = Math.ceil(
-			config.trafficDensity * maxVehicleCount
-		);
-
-		// Reset and repopulate for new config
 		engine.reset();
 
-		// Spawn cars & trucks
-		for (let i = 0; i < targetVehicleCount; i++) {
-			const type =
-				vehicleTypes[Math.floor(Math.random() * vehicleTypes.length)];
-			engine.spawn({ type: type as Entity["type"] });
+		const maxCount = engine.getMaxEntities();
+		const vehicleCount = Math.floor(maxCount * config.trafficDensity);
+
+		// cars + trucks
+		for (let i = 0; i < vehicleCount; i++) {
+			const types: Entity["type"][] = ["Car", "Truck"];
+			const t = types[Math.floor(Math.random() * types.length)];
+			engine.spawn({ type: t });
 		}
 
-		// Spawn pedestrians
+		// pedestrians
 		if (config.pedestrianEnabled) {
-			for (let i = 0; i < 5; i++) {
+			for (let i = 0; i < 8; i++) {
 				engine.spawn({ type: "Pedestrian" });
 			}
 		}
 
-		// Spawn bicycles
+		// bicycles
 		if (config.bicycleEnabled) {
-			for (let i = 0; i < 5; i++) {
+			for (let i = 0; i < 6; i++) {
 				engine.spawn({ type: "Bicycle" });
 			}
 		}
@@ -66,26 +67,25 @@ export function useTrafficSimulation(
 		config.bicycleEnabled,
 	]);
 
-	// Main simulation loop
 	useFrame(() => {
-		const delta = clockRef.current.getDelta() * config.speedMultiplier;
+		const dt = clockRef.current.getDelta() * config.speedMultiplier;
 
-		// Update traffic lights
-		trafficLightsRef.current.update(delta * 1000); // milliseconds
+		// Update light logic (ms)
+		lightsRef.current.update(dt * 1000);
 
-		const NS_GREEN = trafficLightsRef.current.getNSPhase() === "green";
-		const EW_GREEN = trafficLightsRef.current.getEWPhase() === "green";
+		const phases = lightsRef.current.getPhases();
 
-		// Update engine
-		engine.update(delta, { NS: NS_GREEN, EW: EW_GREEN });
+		// Feed simplified boolean to engine (straight movement)
+		engine.update(dt, {
+			NS: phases.NS.straight === "green",
+			EW: phases.EW.straight === "green",
+		});
 
-		// Push new state for rendering
 		setState({
 			entities: engine.getActiveEntities(),
 			trafficLightPhases: {
-				NS: trafficLightsRef.current.getNSPhase(),
-				EW: trafficLightsRef.current.getEWPhase(),
-				countdown: trafficLightsRef.current.getCountdownSecRounded(),
+				...phases,
+				countdown: lightsRef.current.getCountdownSecRounded(),
 			},
 		});
 	});

@@ -1,98 +1,110 @@
 // src/simulation/TrafficLights.ts
-export type LightPhase = "green" | "yellow" | "red";
 
-/**
- * Controller for a two-phase intersection:
- * - NS (north-south) active while EW is inactive, and vice-versa.
- * - Each phase cycles: green -> yellow -> red (implicitly when other side is green).
- *
- * Use update(deltaMs) each frame. Provides:
- * - getNSPhase()/getEWPhase()
- * - getCountdownMs()/getCountdownSec()
- * - toggle() manual flip
- */
+export type PhaseColor = "red" | "yellow" | "green";
+export type PedPhase = "walk" | "stop";
+
+export interface ApproachPhases {
+	straight: PhaseColor;
+	left: PhaseColor;
+	right: PhaseColor;
+}
+
+export interface PedPhases {
+	acrossNS: PedPhase; // crossing the N–S roadway (east-west crosswalks)
+	acrossEW: PedPhase; // crossing the E–W roadway (north-south crosswalks)
+}
+
+export interface FullPhases {
+	NS: ApproachPhases;
+	EW: ApproachPhases;
+	ped: PedPhases;
+}
+
 export class TrafficLights {
-	// which side currently has green: "NS" or "EW"
-	private currentGreen: "NS" | "EW" = "NS";
+	private timeMs = 0;
+	private readonly cycleMs = 28000; // 28s full cycle
+	private phases: FullPhases;
+	private countdownSec = 0;
 
-	// phase of the currently-green side (green -> yellow). We model as:
-	// when currentGreen === "NS", NS is either green or yellow; EW is red.
-	private phase: LightPhase = "green";
-
-	// millisecond timers
-	private timerMs = 0;
-
-	// default durations (ms)
-	public durations = {
-		green: 7000,
-		yellow: 2000,
-		red: 7000, // red duration for opposite side is implicit but keep symmetric
-	};
-
-	// allow pausing automatic cycling
-	public enabled = true;
-
-	constructor(
-		opts?: Partial<{ greenMs: number; yellowMs: number; redMs: number }>
-	) {
-		if (opts?.greenMs) this.durations.green = opts.greenMs;
-		if (opts?.yellowMs) this.durations.yellow = opts.yellowMs;
-		if (opts?.redMs) this.durations.red = opts.redMs;
+	constructor() {
+		this.phases = {
+			NS: { straight: "red", left: "red", right: "red" },
+			EW: { straight: "red", left: "red", right: "red" },
+			ped: { acrossNS: "stop", acrossEW: "stop" },
+		};
 	}
 
 	update(deltaMs: number) {
-		if (!this.enabled) return;
+		this.timeMs = (this.timeMs + deltaMs) % this.cycleMs;
+		const t = this.timeMs / 1000; // seconds
 
-		this.timerMs += deltaMs;
+		let ns: ApproachPhases = {
+			straight: "red",
+			left: "red",
+			right: "red",
+		};
+		let ew: ApproachPhases = {
+			straight: "red",
+			left: "red",
+			right: "red",
+		};
 
-		if (this.phase === "green" && this.timerMs >= this.durations.green) {
-			this.phase = "yellow";
-			this.timerMs = 0;
-		} else if (
-			this.phase === "yellow" &&
-			this.timerMs >= this.durations.yellow
-		) {
-			// switch sides: the other side becomes green
-			this.phase = "green";
-			this.currentGreen = this.currentGreen === "NS" ? "EW" : "NS";
-			this.timerMs = 0;
+		// Timeline (seconds)
+		// 0–8:   NS straight+right green, EW red
+		// 8–10:  NS yellow, EW red
+		// 10–12: NS left green (protected), others red
+		// 12–14: all red (clearance)
+		// 14–22: EW straight+right green, NS red
+		// 22–24: EW yellow, NS red
+		// 24–26: EW left green (protected), others red
+		// 26–28: all red (clearance)
+		const tSec = t;
+
+		if (tSec < 8) {
+			ns.straight = "green";
+			ns.right = "green";
+		} else if (tSec < 10) {
+			ns.straight = "yellow";
+			ns.right = "yellow";
+		} else if (tSec < 12) {
+			ns.left = "green";
+		} else if (tSec < 14) {
+			// all red
+		} else if (tSec < 22) {
+			ew.straight = "green";
+			ew.right = "green";
+		} else if (tSec < 24) {
+			ew.straight = "yellow";
+			ew.right = "yellow";
+		} else if (tSec < 26) {
+			ew.left = "green";
+		} else {
+			// 26–28 all red
 		}
-		// Note: red is implicit for the opposite side while this side is green/yellow
+
+		this.phases.NS = ns;
+		this.phases.EW = ew;
+
+		// Pedestrians:
+		// - acrossNS (east-west crosswalks) are allowed when NS straight is red
+		// - acrossEW (north-south crosswalks) are allowed when EW straight is red
+		const nsRed = ns.straight === "red" && ns.left !== "green";
+		const ewRed = ew.straight === "red" && ew.left !== "green";
+
+		this.phases.ped = {
+			acrossNS: nsRed ? "walk" : "stop",
+			acrossEW: ewRed ? "walk" : "stop",
+		};
+
+		// Simple countdown: seconds remaining in the current cycle
+		this.countdownSec = Math.ceil((this.cycleMs - this.timeMs) / 1000);
 	}
 
-	// manual toggle (immediately flip green side and reset to green)
-	toggle() {
-		this.currentGreen = this.currentGreen === "NS" ? "EW" : "NS";
-		this.phase = "green";
-		this.timerMs = 0;
-	}
-
-	// enable/disable automatic cycling
-	setEnabled(enabled: boolean) {
-		this.enabled = enabled;
-	}
-
-	// returns the phase for NS side
-	getNSPhase(): LightPhase {
-		return this.currentGreen === "NS" ? this.phase : "red";
-	}
-
-	// returns phase for EW side
-	getEWPhase(): LightPhase {
-		return this.currentGreen === "EW" ? this.phase : "red";
-	}
-
-	// returns the countdown (ms) remaining for the active phase for the side that is green/yellow.
-	// For convenience, return countdown for whichever side is currently green.
-	getCountdownMs(): number {
-		if (this.phase === "green")
-			return Math.max(0, this.durations.green - this.timerMs);
-		if (this.phase === "yellow")
-			return Math.max(0, this.durations.yellow - this.timerMs);
-		return 0; // Should not happen in this model
+	getPhases(): FullPhases {
+		return this.phases;
 	}
 
 	getCountdownSecRounded(): number {
-		return Math.ceil(this.getCountdownMs() / 1000);
+		return this.countdownSec;
 	}
 }

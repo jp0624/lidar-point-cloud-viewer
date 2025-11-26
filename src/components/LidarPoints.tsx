@@ -1,6 +1,7 @@
+// src/components/LidarPoints.tsx
 import React, { useMemo, useRef } from "react";
 import { Points, PointMaterial } from "@react-three/drei";
-import type { Entity } from "../simulation/TrafficEngine"; // Type import is correct
+import type { Entity } from "../simulation/TrafficEngine";
 import { computeLidarPoints } from "../simulation/utils";
 
 interface LidarPointsProps {
@@ -12,30 +13,22 @@ export const LidarPoints: React.FC<LidarPointsProps> = ({
 	entities,
 	enabled,
 }) => {
-	const pointsRef = useRef(null);
+	const pointsRef = useRef<THREE.Points>(null);
 
-	// Generate new point positions whenever entities change
 	const positions = useMemo(() => {
 		if (!enabled) return new Float32Array();
-		// Compute Lidar points from the engine's current active entities
-		// The ground plane is also an entity, but we only calculate points for moving objects
-		const movingEntities = entities.filter(
-			(e) => e.type !== "Road" && e.type !== "Sidewalk"
-		);
-		return computeLidarPoints(movingEntities);
+		const moving = entities.filter((e) => e.type !== "Pedestrian" || e.active);
+		return computeLidarPoints(moving);
 	}, [enabled, entities]);
 
-	if (!enabled) {
-		return null;
-	}
+	if (!enabled) return null;
 
 	return (
-		<Points positions={positions} ref={pointsRef}>
-			{/* Color: Red, Size: 0.05 (Smaller size for better detail) */}
+		<Points ref={pointsRef} positions={positions}>
 			<PointMaterial
 				transparent
 				size={0.05}
-				sizeAttenuation={true}
+				sizeAttenuation
 				depthWrite={false}
 				color="#ff0000"
 			/>
