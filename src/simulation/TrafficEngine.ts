@@ -1,4 +1,6 @@
-// src/simulation/TrafficEngine.ts
+// ------------------------------------------------------------
+// TrafficEngine.ts  (FULL UPDATED VERSION)
+// ------------------------------------------------------------
 
 export type EntityType = "Car" | "Truck" | "Bicycle" | "Pedestrian";
 
@@ -9,8 +11,8 @@ export interface Entity {
 	dir: [number, number, number];
 	speed: number;
 	active: boolean;
-	pathId: number; // -1 for pedestrians (non-lane walkers)
-	progress: number; // 0..1 along path
+	pathId: number;
+	progress: number;
 	scale: [number, number, number];
 	color: number;
 }
@@ -21,20 +23,23 @@ export interface SpawnOptions {
 	speed?: number;
 }
 
-// Simple id generator
+// ID generator
 const makeId = () => Math.random().toString(36).slice(2, 9);
 
-// Road geometry assumptions (aligned with IntersectionScene)
-const ROAD_EXTENT = 20; // road runs from -20 to +20 in X/Z
+// ----------------------------------------------
+// SHARED WORLD CONSTANTS (Matches IntersectionScene)
+// ----------------------------------------------
+export const ROAD_EXTENT = 20;
+export const INTERSECTION_SIZE = 8; // center square +/-4
+const STOP_LINE = INTERSECTION_SIZE / 2; // 4.0
 
-// Lane center offsets (4 lanes per direction axis)
 const LANE_OFFSETS = [-1.5, -0.5, 0.5, 1.5];
 
-// PATHS: 8 lane paths (2 per direction per side)
-// 0,1 = NS (south -> north), 2,3 = SN (north -> south)
-// 4,5 = WE (west -> east),   6,7 = EW (east -> west)
+// ----------------------------------------------
+// PATH DEFINITIONS (8 lanes total)
+// ----------------------------------------------
 export const PATHS: Array<[number, number, number][]> = [
-	// NS lanes (south to north, z: -20 -> +20)
+	// NS (south → north)
 	[
 		[LANE_OFFSETS[0], 0, -ROAD_EXTENT],
 		[LANE_OFFSETS[0], 0, ROAD_EXTENT],
@@ -44,7 +49,7 @@ export const PATHS: Array<[number, number, number][]> = [
 		[LANE_OFFSETS[1], 0, ROAD_EXTENT],
 	],
 
-	// SN lanes (north to south, z: +20 -> -20)
+	// SN (north → south)
 	[
 		[LANE_OFFSETS[2], 0, ROAD_EXTENT],
 		[LANE_OFFSETS[2], 0, -ROAD_EXTENT],
@@ -54,7 +59,7 @@ export const PATHS: Array<[number, number, number][]> = [
 		[LANE_OFFSETS[3], 0, -ROAD_EXTENT],
 	],
 
-	// WE lanes (west to east, x: -20 -> +20)
+	// WE (west → east)
 	[
 		[-ROAD_EXTENT, 0, LANE_OFFSETS[2]],
 		[ROAD_EXTENT, 0, LANE_OFFSETS[2]],
@@ -64,7 +69,7 @@ export const PATHS: Array<[number, number, number][]> = [
 		[ROAD_EXTENT, 0, LANE_OFFSETS[3]],
 	],
 
-	// EW lanes (east to west, x: +20 -> -20)
+	// EW (east → west)
 	[
 		[ROAD_EXTENT, 0, LANE_OFFSETS[0]],
 		[-ROAD_EXTENT, 0, LANE_OFFSETS[0]],
@@ -75,26 +80,30 @@ export const PATHS: Array<[number, number, number][]> = [
 	],
 ];
 
-// Visual size of each type (world-space-ish)
+// ----------------------------------------------
+// Visual Size Scaling
+// ----------------------------------------------
 const SCALES: Record<EntityType, [number, number, number]> = {
-	// width (x), height (y), length (z)
-	Car: [1.2, 0.6, 2.4], // long low box
-	Truck: [1.2, 1.2, 4.0], // taller & longer
-	Bicycle: [0.4, 0.6, 1.2], // narrow & short
-	Pedestrian: [0.4, 1.7, 0.4], // tall thin cylinder/box
+	Car: [1.2, 0.6, 2.4],
+	Truck: [1.2, 1.2, 4.0],
+	Bicycle: [0.4, 0.6, 1.2],
+	Pedestrian: [0.4, 1.7, 0.4],
 };
 
 const SPEEDS: Record<EntityType, number> = {
-	Car: 8.0,
-	Truck: 6.0,
-	Bicycle: 7.0,
-	Pedestrian: 2.0,
+	Car: 8,
+	Truck: 6,
+	Bicycle: 7,
+	Pedestrian: 2,
 };
 
+// ------------------------------------------------------------
+// TrafficEngine
+// ------------------------------------------------------------
 export class TrafficEngine {
 	private entities: Entity[] = [];
 	private maxEntities: number;
-	private minSpacing = 0.06; // minimum Δprogress between vehicles
+	private minSpacing = 0.06;
 
 	constructor(maxEntities = 256) {
 		this.maxEntities = maxEntities;
@@ -135,134 +144,134 @@ export class TrafficEngine {
 		}
 	}
 
-	private pointOnPath(
-		pathId: number,
-		progress: number
-	): [number, number, number] {
+	// --------------------------------------------
+	// Path math helpers
+	// --------------------------------------------
+	private pointOnPath(pathId: number, progress: number) {
 		const [a, b] = PATHS[pathId];
-		const x = a[0] + (b[0] - a[0]) * progress;
-		const y = a[1] + (b[1] - a[1]) * progress;
-		const z = a[2] + (b[2] - a[2]) * progress;
-		return [x, y, z];
+		return [
+			a[0] + (b[0] - a[0]) * progress,
+			0,
+			a[2] + (b[2] - a[2]) * progress,
+		] as [number, number, number];
 	}
 
-	private tangentOnPath(pathId: number): [number, number, number] {
+	private tangentOnPath(pathId: number) {
 		const [a, b] = PATHS[pathId];
 		const dx = b[0] - a[0];
-		const dy = b[1] - a[1];
 		const dz = b[2] - a[2];
-		const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-		return [dx / len, dy / len, dz / len];
+		const len = Math.sqrt(dx * dx + dz * dz) || 1;
+		return [dx / len, 0, dz / len] as [number, number, number];
 	}
 
+	// --------------------------------------------
+	// SPAWN
+	// --------------------------------------------
 	spawn(opts: SpawnOptions = {}): string | null {
 		const slot = this.entities.find((e) => !e.active);
 		if (!slot) return null;
 
-		const type: EntityType = opts.type ?? "Car";
-
+		const type = opts.type ?? "Car";
 		slot.id = makeId();
 		slot.type = type;
 		slot.scale = SCALES[type];
 		slot.color = Math.floor(Math.random() * 5);
 		slot.speed = opts.speed ?? SPEEDS[type];
 
+		// ----------------------------------------
+		// PEDESTRIANS
+		// ----------------------------------------
 		if (type === "Pedestrian") {
-			// Pedestrians walk along sidewalks: a simple loop around the intersection
-			const side = Math.floor(Math.random() * 4); // 0=N,1=E,2=S,3=W
-			const offset = ROAD_EXTENT - 2; // near edge of road for sidewalk
+			const side = Math.floor(Math.random() * 4);
+			const offset = ROAD_EXTENT - 2;
 
 			let pos: [number, number, number];
 			let dir: [number, number, number];
 
 			switch (side) {
-				case 0: // North sidewalk: left->right along +z (~+10)
+				case 0:
 					pos = [-offset, 0, 10];
 					dir = [1, 0, 0];
 					break;
-				case 1: // East sidewalk: top->bottom along +x (~+10)
+				case 1:
 					pos = [10, 0, offset];
 					dir = [0, 0, -1];
 					break;
-				case 2: // South sidewalk: right->left along -z (~-10)
+				case 2:
 					pos = [offset, 0, -10];
 					dir = [-1, 0, 0];
 					break;
-				default: // West sidewalk
+				default:
 					pos = [-10, 0, -offset];
 					dir = [0, 0, 1];
 					break;
 			}
 
-			slot.pathId = -1; // non-lane
-			slot.progress = 0;
+			slot.active = true;
+			slot.pathId = -1;
 			slot.position = pos;
 			slot.dir = dir;
-		} else {
-			// Cars, trucks, bikes spawn into lane paths
-			const pathId =
-				opts.pathId ??
-				(() => {
-					// Cars & trucks mostly on car lanes, bikes can be anywhere but we offset visually
-					const carTruckLanes = [0, 1, 2, 3, 4, 5, 6, 7];
-					const bikeLanes = [0, 1, 2, 3, 4, 5, 6, 7];
-					const pool = type === "Bicycle" ? bikeLanes : carTruckLanes;
-					return pool[Math.floor(Math.random() * pool.length)];
-				})();
-
-			slot.pathId = pathId;
-			slot.progress = Math.random(); // randomize to avoid clumping at spawn
-			slot.position = this.pointOnPath(pathId, slot.progress);
-			slot.dir = this.tangentOnPath(pathId);
+			slot.progress = 0;
+			return slot.id;
 		}
 
+		// ----------------------------------------
+		// VEHICLES + BIKES
+		// ----------------------------------------
+		const pathId = opts.pathId ?? Math.floor(Math.random() * PATHS.length);
+
+		slot.pathId = pathId;
+		slot.progress = Math.random();
+		slot.position = this.pointOnPath(pathId, slot.progress);
+		slot.dir = this.tangentOnPath(pathId);
 		slot.active = true;
+
 		return slot.id;
 	}
 
-	despawn(id: string) {
-		const e = this.entities.find((x) => x.id === id);
-		if (!e) return;
-		e.active = false;
-	}
-
-	update(dt: number, trafficLights?: { NS: boolean; EW: boolean }) {
-		// 1) Update lane-based entities (cars, trucks, bikes)
+	// --------------------------------------------
+	// UPDATE
+	// --------------------------------------------
+	update(dt: number, lights?: { NS: boolean; EW: boolean }) {
 		for (let lane = 0; lane < PATHS.length; lane++) {
-			const onLane = this.entities
+			const laneVehicles = this.entities
 				.filter((e) => e.active && e.pathId === lane && e.type !== "Pedestrian")
 				.sort((a, b) => a.progress - b.progress);
 
-			for (const ent of onLane) {
+			for (const ent of laneVehicles) {
 				const speed = ent.speed || SPEEDS[ent.type];
-				if (speed <= 0) continue;
+				const delta = (speed * dt) / (ROAD_EXTENT * 2);
+				let next = ent.progress + delta;
 
-				// delta progress based on world speed
-				const pathLength = ROAD_EXTENT * 2;
-				const deltaProgress = (speed * dt) / pathLength;
+				const isNS = lane < 4;
+				const green = isNS ? lights?.NS ?? true : lights?.EW ?? true;
 
-				let next = ent.progress + deltaProgress;
+				const [wx, , wz] = ent.position;
 
-				const isNSLane = lane < 4; // 0-3 are NS/SN
-				const lightIsGreen = isNSLane
-					? trafficLights?.NS ?? true
-					: trafficLights?.EW ?? true;
+				if (!green) {
+					// STOP NS/SN
+					if (isNS) {
+						const nextZ = wz + ent.dir[2] * speed * dt;
+						if (Math.abs(wz) > STOP_LINE && Math.abs(nextZ) <= STOP_LINE) {
+							next = ent.progress;
+						}
+					}
 
-				// Stop BEFORE entering intersection if red:
-				// intersection is roughly central; stop around progress ~0.4
-				const stopThreshold = 0.4;
-				if (!lightIsGreen && ent.progress < stopThreshold) {
-					// don't move if still before stop line
-					next = ent.progress;
+					// STOP WE/EW
+					else {
+						const nextX = wx + ent.dir[0] * speed * dt;
+						if (Math.abs(wx) > STOP_LINE && Math.abs(nextX) <= STOP_LINE) {
+							next = ent.progress;
+						}
+					}
 				}
 
-				// Enforce spacing
-				const ahead = onLane.find((v) => v.progress > ent.progress);
+				// Vehicle spacing
+				const ahead = laneVehicles.find((v) => v.progress > ent.progress);
 				if (ahead && ahead.progress - next < this.minSpacing) {
 					next = Math.max(ent.progress, ahead.progress - this.minSpacing);
 				}
 
-				// Wrap around when finishing lane
 				if (next > 1) next -= 1;
 
 				ent.progress = next;
@@ -271,21 +280,22 @@ export class TrafficEngine {
 			}
 		}
 
-		// 2) Update pedestrians (walkers along sidewalks)
+		// ----------------------------------------
+		// PEDESTRIANS
+		// ----------------------------------------
 		for (const ent of this.entities) {
 			if (!ent.active || ent.type !== "Pedestrian") continue;
 
-			const [dx, , dz] = ent.dir;
-			const step = (ent.speed || SPEEDS.Pedestrian) * dt;
+			const dx = ent.dir[0];
+			const dz = ent.dir[2];
+			const step = ent.speed * dt;
 
 			let [x, y, z] = ent.position;
 			x += dx * step;
 			z += dz * step;
 
-			// Simple bounding box around the outer sidewalks
 			const limit = ROAD_EXTENT + 2;
 			if (x > limit || x < -limit || z > limit || z < -limit) {
-				// loop around: flip direction
 				ent.dir = [-dx, 0, -dz];
 			} else {
 				ent.position = [x, y, z];
