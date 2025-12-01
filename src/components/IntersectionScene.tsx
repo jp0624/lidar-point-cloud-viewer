@@ -2,64 +2,108 @@
 import React from "react";
 import { useTrafficSimulation } from "../hooks/useTrafficSimulation";
 import { Vehicle } from "./Vehicle";
-import { TrafficSignal } from "./TrafficSignal";
-import { PedestrianSignal } from "./PedestrianSignal";
 import type { SimConfig } from "../types/SceneTypes";
 import type { TrafficEngine } from "../simulation/TrafficEngine";
 
-// Geometry constants
+// Geometry constants (must match TrafficEngine)
 const ROAD_WIDTH = 6; // 4 lanes total (1.5 per lane)
 const BIKE_LANE_W = 1.2;
 const SIDEWALK_W = 1.5;
 const WORLD_EXTENT = 20;
-export const INTERSECTION_SIZE = 8; // +/- 4
+const INTERSECTION_SIZE = 8; // +/- 4 around center
 
 interface IntersectionSceneProps {
 	engine: TrafficEngine;
 	config: SimConfig;
 }
 
-type PedPhase = "walk" | "dontWalk" | "blink";
+/**
+ * Convert light phase -> per-lens colors for a 3-light stack.
+ * Only the active lens is bright, others are dimmed.
+ */
+function phaseToLensColors(phase: "green" | "yellow" | "red") {
+	const dimRed = "#550000";
+	const dimYellow = "#555500";
+	const dimGreen = "#005500";
 
+	switch (phase) {
+		case "green":
+			return { red: dimRed, yellow: dimYellow, green: "#00ff00" };
+		case "yellow":
+			return { red: dimRed, yellow: "#ffff00", green: dimGreen };
+		case "red":
+		default:
+			return { red: "#ff0000", yellow: dimYellow, green: dimGreen };
+	}
+}
+
+/**
+ * Small helper to render a 3-stage vertical traffic light on a pole.
+ * The group is placed at (x,z) and rotated so that it faces incoming traffic.
+ */
+const TrafficPole: React.FC<{
+	x: number;
+	z: number;
+	phase: "green" | "yellow" | "red";
+	rotationY: number;
+}> = ({ x, z, phase, rotationY }) => {
+	const { red, yellow, green } = phaseToLensColors(phase);
+
+	return (
+		<group position={[x, 0, z]} rotation={[0, rotationY, 0]}>
+			{/* Pole */}
+			<mesh position={[0, 1.2, 0]}>
+				<cylinderGeometry args={[0.05, 0.05, 2.4, 12]} />
+				<meshStandardMaterial color="#444444" />
+			</mesh>
+
+			{/* Light housing */}
+			<mesh position={[0, 2.1, 0.25]}>
+				<boxGeometry args={[0.35, 0.9, 0.2]} />
+				<meshStandardMaterial color="#111111" />
+			</mesh>
+
+			{/* Red lens (top) */}
+			<mesh position={[0, 2.35, 0.31]}>
+				<sphereGeometry args={[0.08, 16, 16]} />
+				<meshStandardMaterial emissive={red} color={red} />
+			</mesh>
+
+			{/* Yellow lens (middle) */}
+			<mesh position={[0, 2.1, 0.31]}>
+				<sphereGeometry args={[0.08, 16, 16]} />
+				<meshStandardMaterial emissive={yellow} color={yellow} />
+			</mesh>
+
+			{/* Green lens (bottom) */}
+			<mesh position={[0, 1.85, 0.31]}>
+				<sphereGeometry args={[0.08, 16, 16]} />
+				<meshStandardMaterial emissive={green} color={green} />
+			</mesh>
+		</group>
+	);
+};
+
+/**
+ * Pure R3F scene component.
+ * Must only contain 3D objects (no <div> / DOM).
+ */
 export function IntersectionScene({ engine, config }: IntersectionSceneProps) {
 	const { entities, trafficLightPhases } = useTrafficSimulation(engine, config);
 
-	const nsPhase = trafficLightPhases.NS; // "green" | "yellow" | "red"
-	const ewPhase = trafficLightPhases.EW;
-	const countdown = trafficLightPhases.countdown;
-
-	// Pedestrians crossing the N-S roadway (i.e. E-W crosswalks)
-	const pedAcrossNSRoad: PedPhase =
-		nsPhase === "red" ? (countdown <= 3 ? "blink" : "walk") : "dontWalk";
-
-	// Pedestrians crossing the E-W roadway (i.e. N-S crosswalks)
-	const pedAcrossEWRoad: PedPhase =
-		ewPhase === "red" ? (countdown <= 3 ? "blink" : "walk") : "dontWalk";
-
-	const phaseToColor = (phase: string) => {
-		switch (phase) {
-			case "green":
-				return "#00ff00";
-			case "yellow":
-				return "#ffff00";
-			default:
-				return "#ff0000";
-		}
-	};
-
 	return (
 		<>
-			{/* ----- GLOBAL LIGHTING ----- */}
+			{/* GLOBAL LIGHTING */}
 			<hemisphereLight args={[0xffffff, 0x404040, 1]} />
 			<directionalLight position={[50, 80, -30]} intensity={0.7} />
 
-			{/* ----- GROUND PLANE ----- */}
+			{/* GROUND PLANE */}
 			<mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
 				<planeGeometry args={[200, 200]} />
 				<meshStandardMaterial color="#2a2a2a" />
 			</mesh>
 
-			{/* ----- ROADS (CROSS) ----- */}
+			{/* ROADS (CROSS) */}
 			{/* Vertical (N–S) road */}
 			<mesh position={[0, 0.05, 0]}>
 				<boxGeometry args={[ROAD_WIDTH, 0.1, WORLD_EXTENT * 2]} />
@@ -72,19 +116,19 @@ export function IntersectionScene({ engine, config }: IntersectionSceneProps) {
 				<meshStandardMaterial color="#111111" />
 			</mesh>
 
-			{/* ----- BIKE LANES (green strips) ----- */}
-			{/* Vertical bike lanes, left/right of NS road */}
+			{/* BIKE LANES (green strips) */}
+			{/* Vertical bike lanes, left/right of vertical road */}
 			<mesh position={[-(ROAD_WIDTH / 2) - BIKE_LANE_W / 2, 0.06, 0]}>
 				<boxGeometry args={[BIKE_LANE_W, 0.1, WORLD_EXTENT * 2]} />
 				<meshStandardMaterial color="#00aa00" />
 			</mesh>
-			<mesh position={[+(ROAD_WIDTH / 2) + BIKE_LANE_W / 2, 0.06, 0]}>
+			<mesh position={[ROAD_WIDTH / 2 + BIKE_LANE_W / 2, 0.06, 0]}>
 				<boxGeometry args={[BIKE_LANE_W, 0.1, WORLD_EXTENT * 2]} />
 				<meshStandardMaterial color="#00aa00" />
 			</mesh>
 
-			{/* Horizontal bike lanes, above/below E–W road */}
-			<mesh position={[0, 0.06, +(ROAD_WIDTH / 2) + BIKE_LANE_W / 2]}>
+			{/* Horizontal bike lanes, above/below horizontal road */}
+			<mesh position={[0, 0.06, ROAD_WIDTH / 2 + BIKE_LANE_W / 2]}>
 				<boxGeometry args={[WORLD_EXTENT * 2, 0.1, BIKE_LANE_W]} />
 				<meshStandardMaterial color="#00aa00" />
 			</mesh>
@@ -93,7 +137,7 @@ export function IntersectionScene({ engine, config }: IntersectionSceneProps) {
 				<meshStandardMaterial color="#00aa00" />
 			</mesh>
 
-			{/* ----- SIDEWALKS (outer beige strips) ----- */}
+			{/* SIDEWALKS (outer beige strips) */}
 			{/* Vertical sidewalks, outside bike lanes */}
 			<mesh
 				position={[-(ROAD_WIDTH / 2 + BIKE_LANE_W + SIDEWALK_W / 2), 0.07, 0]}
@@ -106,7 +150,7 @@ export function IntersectionScene({ engine, config }: IntersectionSceneProps) {
 				<meshStandardMaterial color="#bababa" />
 			</mesh>
 
-			{/* Horizontal sidewalks */}
+			{/* Horizontal sidewalks, outside bike lanes */}
 			<mesh position={[0, 0.07, ROAD_WIDTH / 2 + BIKE_LANE_W + SIDEWALK_W / 2]}>
 				<boxGeometry args={[WORLD_EXTENT * 2, 0.1, SIDEWALK_W]} />
 				<meshStandardMaterial color="#bababa" />
@@ -118,132 +162,46 @@ export function IntersectionScene({ engine, config }: IntersectionSceneProps) {
 				<meshStandardMaterial color="#bababa" />
 			</mesh>
 
-			{/* ----- INTERSECTION CENTER ----- */}
+			{/* INTERSECTION CENTER (debug square / center box) */}
 			<mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 0]}>
 				<planeGeometry args={[INTERSECTION_SIZE, INTERSECTION_SIZE]} />
-				<meshStandardMaterial color="#333333" transparent opacity={0.85} />
+				<meshStandardMaterial color="#333333" transparent opacity={0.8} />
 			</mesh>
 
-			{/* =========================================================
-			    CROSSWALKS (simple zebra stripes)
-			   ========================================================= */}
-			{/* E–W crosswalks (across N–S roadway) - north & south */}
-			{["north", "south"].map((side, index) => {
-				const z = (side === "north" ? 1 : -1) * (INTERSECTION_SIZE / 2 + 0.3);
-				return (
-					<group key={side} position={[0, 0.081, z]}>
-						{Array.from({ length: 6 }).map((_, i) => {
-							const offset = (i - 2.5) * 0.6; // spread strips along X over road width
-							return (
-								<mesh key={i} position={[offset, 0, 0]}>
-									<boxGeometry args={[0.4, 0.02, 2.5]} />
-									<meshStandardMaterial color="#fdfdfd" />
-								</mesh>
-							);
-						})}
-					</group>
-				);
-			})}
-
-			{/* N–S crosswalks (across E–W roadway) - east & west */}
-			{["east", "west"].map((side, index) => {
-				const x = (side === "east" ? 1 : -1) * (INTERSECTION_SIZE / 2 + 0.3);
-				return (
-					<group key={side} position={[x, 0.081, 0]}>
-						{Array.from({ length: 6 }).map((_, i) => {
-							const offset = (i - 2.5) * 0.6; // spread strips along Z over road width
-							return (
-								<mesh key={i} position={[0, 0, offset]}>
-									<boxGeometry args={[2.5, 0.02, 0.4]} />
-									<meshStandardMaterial color="#fdfdfd" />
-								</mesh>
-							);
-						})}
-					</group>
-				);
-			})}
-
-			{/* =========================================================
-			    VEHICLE TRAFFIC SIGNALS (3-light poles)
-			   ========================================================= */}
-			{/* NS pair (controls N/S lanes) */}
-			<TrafficSignal
-				position={[
-					-INTERSECTION_SIZE / 2 - 1.2,
-					0,
-					-INTERSECTION_SIZE / 2 - 1.2,
-				]}
-				rotationY={Math.PI / 4}
-				state={nsPhase}
+			{/* TRAFFIC POLES (one per corner, facing incoming traffic) */}
+			{/* NS lights (control NS/SN flow) */}
+			{/* South-west corner, facing northbound traffic (towards +z) */}
+			<TrafficPole
+				x={-INTERSECTION_SIZE / 2 - 1}
+				z={-INTERSECTION_SIZE / 2 - 1}
+				phase={trafficLightPhases.NS}
+				rotationY={Math.PI} // faces +z
 			/>
-			<TrafficSignal
-				position={[INTERSECTION_SIZE / 2 + 1.2, 0, INTERSECTION_SIZE / 2 + 1.2]}
-				rotationY={(-3 * Math.PI) / 4}
-				state={nsPhase}
+			{/* North-east corner, facing southbound traffic (towards -z) */}
+			<TrafficPole
+				x={INTERSECTION_SIZE / 2 + 1}
+				z={INTERSECTION_SIZE / 2 + 1}
+				phase={trafficLightPhases.NS}
+				rotationY={0} // faces -z
 			/>
 
-			{/* EW pair (controls E/W lanes) */}
-			<TrafficSignal
-				position={[
-					INTERSECTION_SIZE / 2 + 1.2,
-					0,
-					-INTERSECTION_SIZE / 2 - 1.2,
-				]}
-				rotationY={(3 * Math.PI) / 4}
-				state={ewPhase}
+			{/* EW lights (control WE/EW flow) */}
+			{/* North-west corner, facing eastbound traffic (towards +x) */}
+			<TrafficPole
+				x={-INTERSECTION_SIZE / 2 - 1}
+				z={INTERSECTION_SIZE / 2 + 1}
+				phase={trafficLightPhases.EW}
+				rotationY={-Math.PI / 2} // faces +x
 			/>
-			<TrafficSignal
-				position={[
-					-INTERSECTION_SIZE / 2 - 1.2,
-					0,
-					INTERSECTION_SIZE / 2 + 1.2,
-				]}
-				rotationY={-Math.PI / 4}
-				state={ewPhase}
+			{/* South-east corner, facing westbound traffic (towards -x) */}
+			<TrafficPole
+				x={INTERSECTION_SIZE / 2 + 1}
+				z={-INTERSECTION_SIZE / 2 - 1}
+				phase={trafficLightPhases.EW}
+				rotationY={Math.PI / 2} // faces -x
 			/>
 
-			{/* =========================================================
-			    PEDESTRIAN SIGNALS (realistic, blinking WALK)
-			   ========================================================= */}
-			{/* E–W crossings use pedAcrossNSRoad (crossing N–S lanes) */}
-			<PedestrianSignal
-				position={[INTERSECTION_SIZE / 2 + 0.8, 0, INTERSECTION_SIZE / 2 + 0.2]}
-				rotationY={-Math.PI / 2}
-				phase={pedAcrossNSRoad}
-			/>
-			<PedestrianSignal
-				position={[
-					-INTERSECTION_SIZE / 2 - 0.8,
-					0,
-					-INTERSECTION_SIZE / 2 - 0.2,
-				]}
-				rotationY={Math.PI / 2}
-				phase={pedAcrossNSRoad}
-			/>
-
-			{/* N–S crossings use pedAcrossEWRoad (crossing E–W lanes) */}
-			<PedestrianSignal
-				position={[
-					INTERSECTION_SIZE / 2 + 0.2,
-					0,
-					-INTERSECTION_SIZE / 2 - 0.8,
-				]}
-				rotationY={0}
-				phase={pedAcrossEWRoad}
-			/>
-			<PedestrianSignal
-				position={[
-					-INTERSECTION_SIZE / 2 - 0.2,
-					0,
-					INTERSECTION_SIZE / 2 + 0.8,
-				]}
-				rotationY={Math.PI}
-				phase={pedAcrossEWRoad}
-			/>
-
-			{/* =========================================================
-			    ENTITIES (Cars, Trucks, Bikes, Pedestrians)
-			   ========================================================= */}
+			{/* VEHICLES / BIKES / PEDESTRIANS */}
 			{entities.map((e) => (
 				<Vehicle key={e.id} entity={e} />
 			))}

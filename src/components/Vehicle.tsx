@@ -7,12 +7,21 @@ interface VehicleProps {
 	entity: Entity;
 }
 
+// Optional extra color map, used as fallback
+const colorMap: Record<number, string> = {
+	0: "#ff5555",
+	1: "#55ff55",
+	2: "#5555ff",
+	3: "#ffff55",
+	4: "#ff55ff",
+};
+
 export const Vehicle: React.FC<VehicleProps> = ({ entity }) => {
 	const { position, dir, scale, type } = entity;
 
-	// Base position and scale
-	const [sx, sy, sz] = scale;
+	// Base position
 	let [x, y, z] = position;
+	const [sx, sy, sz] = scale;
 
 	// Compute heading from direction vector
 	const rotationY = useMemo(() => {
@@ -20,26 +29,24 @@ export const Vehicle: React.FC<VehicleProps> = ({ entity }) => {
 		return Math.atan2(dx, dz);
 	}, [dir]);
 
-	// Pedestrians should be vertical cylinders
+	// IMPORTANT CHANGE:
+	// Bicycles are now already on bike-lane paths (BIKE_PATHS),
+	// so we DO NOT laterally offset them here anymore.
+	// (If you want a tiny visual offset inside the green lane, set a very small lateralOffset.)
+
+	// Pedestrians should be vertical cylinders on sidewalks
 	const isPedestrian = type === "Pedestrian";
 
-	// Type-based color mapping (no random hue for main types)
+	// Color per type
 	const meshColor = useMemo(() => {
-		switch (type) {
-			case "Car":
-				return 0xff0000; // red
-			case "Truck":
-				return 0x0000ff; // blue
-			case "Bicycle":
-				return 0x00ff00; // green
-			case "Pedestrian":
-				return 0xffff00; // yellow
-			default:
-				return new THREE.Color("#ffffff").getHex();
-		}
-	}, [type]);
+		if (type === "Bicycle") return 0x00ff00;
+		if (type === "Pedestrian") return 0xffff00;
+		if (type === "Truck") return 0x5555ff;
+		// Car default or fallback to colorMap
+		return new THREE.Color(colorMap[entity.color] || colorMap[0]).getHex();
+	}, [type, entity.color]);
 
-	const height = sy;
+	const height = sy; // actual scale.y
 	const width = sx;
 	const length = sz;
 
@@ -59,7 +66,7 @@ export const Vehicle: React.FC<VehicleProps> = ({ entity }) => {
 					<meshStandardMaterial color={meshColor} />
 				</mesh>
 			) : (
-				// Box for vehicles (car, truck, bicycle)
+				// Box for vehicles (car, truck, bike)
 				<mesh position={[0, height / 2, 0]}>
 					<boxGeometry args={[width, height, length]} />
 					<meshStandardMaterial color={meshColor} />

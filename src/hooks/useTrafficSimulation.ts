@@ -1,21 +1,30 @@
 // src/hooks/useTrafficSimulation.ts
+
 import { useFrame } from "@react-three/fiber";
 import { useRef, useState, useEffect } from "react";
 import { TrafficEngine } from "../simulation/TrafficEngine";
 import type { Entity } from "../simulation/TrafficEngine";
 import { TrafficLights } from "../simulation/TrafficLights";
-import { PedestrianSignals } from "../simulation/PedestrianSignals";
 import type { SimConfig } from "../types/SceneTypes";
 import * as THREE from "three";
+import type {
+	PhaseColor,
+	ArrowPhase,
+	PedPhase,
+} from "../simulation/TrafficLights";
 
 export interface SimulationState {
 	entities: Entity[];
 	trafficLightPhases: {
-		NS: "green" | "yellow" | "red";
-		EW: "green" | "yellow" | "red";
-		pedNS: "walk" | "flash" | "dont";
-		pedEW: "walk" | "flash" | "dont";
+		NS: PhaseColor;
+		EW: PhaseColor;
 		countdown: number;
+
+		// New: arrow and pedestrian phases (optional for backward compatibility)
+		NSLeft?: ArrowPhase;
+		EWLeft?: ArrowPhase;
+		pedNS?: PedPhase;
+		pedEW?: PedPhase;
 	};
 }
 
@@ -28,75 +37,88 @@ export function useTrafficSimulation(
 		trafficLightPhases: {
 			NS: "green",
 			EW: "red",
-			pedNS: "dont",
-			pedEW: "dont",
 			countdown: 0,
+			NSLeft: "off",
+			EWLeft: "off",
+			pedNS: "hand",
+			pedEW: "hand",
 		},
 	});
 
 	const clockRef = useRef(new THREE.Clock());
-	const lightsRef = useRef(new TrafficLights());
-	const pedRef = useRef(new PedestrianSignals());
+	const trafficLightsRef = useRef(new TrafficLights());
 
-	// ===========================================================
-	// ENTITY POPULATION (when user toggles settings)
-	// ===========================================================
+	// Re-populate when density sliders change
 	useEffect(() => {
 		engine.reset();
 
-		// Primary vehicle lanes
-		const maxCarCount = Math.floor(engine.getMaxEntities() * 0.7);
-		const count = Math.ceil(config.trafficDensity * maxCarCount);
+		const max = engine.getMaxEntities();
+		const targetTotal = Math.max(4, Math.floor(max * config.trafficDensity));
 
-		for (let i = 0; i < count; i++) {
-			engine.spawn({
-				type: Math.random() > 0.1 ? "Car" : "Truck",
-			});
-		}
+		// Normalize ratios
+		const sumRatios =
+			config.carRatio +
+				config.truckRatio +
+				config.bikeRatio +
+				config.pedRatio || 1;
 
-		if (config.bicycleEnabled) {
-			for (let i = 0; i < 6; i++) engine.spawn({ type: "Bicycle" });
-		}
-		if (config.pedestrianEnabled) {
-			for (let i = 0; i < 10; i++) engine.spawn({ type: "Pedestrian" });
-		}
+		const normCar = config.carRatio / sumRatios;
+		const normTruck = config.truckRatio / sumRatios;
+		const normBike = config.bikeRatio / sumRatios;
+		const normPed = config.pedRatio / sumRatios;
+
+		const counts = {
+			car: Math.floor(targetTotal * normCar),
+			truck: Math.floor(targetTotal * normTruck),
+			bike: Math.floor(targetTotal * normBike),
+			ped: Math.floor(targetTotal * normPed),
+		};
+
+		for (let i = 0; i < counts.car; i++) engine.spawn({ type: "Car" });
+		for (let i = 0; i < counts.truck; i++) engine.spawn({ type: "Truck" });
+		for (let i = 0; i < counts.bike; i++) engine.spawn({ type: "Bicycle" });
+		for (let i = 0; i < counts.ped; i++) engine.spawn({ type: "Pedestrian" });
 	}, [
 		engine,
 		config.trafficDensity,
-		config.bicycleEnabled,
-		config.pedestrianEnabled,
+		config.carRatio,
+		config.truckRatio,
+		config.bikeRatio,
+		config.pedRatio,
 	]);
 
-	// ===========================================================
-	// SIM UPDATE LOOP (every frame)
-	// ===========================================================
 	useFrame(() => {
-		const dt = clockRef.current.getDelta() * config.speedMultiplier;
+		const delta = clockRef.current.getDelta() * config.speedMultiplier;
 
-		// Update traffic lights (cars)
-		lightsRef.current.update(dt * 1000);
+		// 1) Update traffic lights with deltaMs
+		trafficLightsRef.current.update(delta * 1000);
 
-		const NSphase = lightsRef.current.getNSPhase();
-		const EWphase = lightsRef.current.getEWPhase();
+		let nsPhase = trafficLightsRef.current.getNSPhase();
+		let ewPhase = trafficLightsRef.current.getEWPhase();
 
-		// Update pedestrian signals based on actual phases
-		pedRef.current.update(dt * 1000, NSphase, EWphase);
+		// Optional force for debugging
+		if (config.forceLightPhase !== "auto") {
+			nsPhase = config.forceLightPhase;
+			ewPhase = config.forceLightPhase;
+		}
 
-		// Update world physics
-		engine.update(dt, {
-			NS: NSphase === "green",
-			EW: EWphase === "green",
-		});
+		const NS_GREEN = nsPhase === "green";
+		const EW_GREEN = ewPhase === "green";
 
-		// Push render state to Component
+		// 2) Update traffic engine with MAIN ball heads only
+		engine.update(delta, { NS: NS_GREEN, EW: EW_GREEN });
+
+		// 3) Publish full phase state to scene
 		setState({
 			entities: engine.getActiveEntities(),
 			trafficLightPhases: {
-				NS: NSphase,
-				EW: EWphase,
-				pedNS: pedRef.current.getNS(),
-				pedEW: pedRef.current.getEW(),
-				countdown: lightsRef.current.getCountdownSecRounded(),
+				NS: nsPhase,
+				EW: ewPhase,
+				countdown: trafficLightsRef.current.getCountdownSecRounded(),
+				NSLeft: trafficLightsRef.current.getNSLeftPhase(),
+				EWLeft: trafficLightsRef.current.getEWLeftPhase(),
+				pedNS: trafficLightsRef.current.getPedNSPhase(),
+				pedEW: trafficLightsRef.current.getPedEWPhase(),
 			},
 		});
 	});

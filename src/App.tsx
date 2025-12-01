@@ -1,29 +1,27 @@
 // src/App.tsx
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
-
+import { OrbitControls } from "@react-three/drei"; // ⬅ add this
 import { IntersectionScene } from "./components/IntersectionScene";
 import { ConfigPanel } from "./ui/ConfigPanel";
 import { TrafficEngine } from "./simulation/TrafficEngine";
 import type { SimConfig } from "./types/SceneTypes";
 import { LidarLegend } from "./ui/LidarLegend";
+import "./App.css";
 
 const DEFAULT_CONFIG: SimConfig = {
 	trafficDensity: 0.5,
+	carRatio: 0.4,
+	truckRatio: 0.1,
+	bikeRatio: 0.3,
+	pedRatio: 0.2,
 	speedMultiplier: 1.0,
-	pedestrianEnabled: true,
-	bicycleEnabled: true,
 	lidarEnabled: false,
+	forceLightPhase: "auto",
 };
 
-export const App: React.FC = () => {
+function App() {
 	const [config, setConfig] = useState<SimConfig>(DEFAULT_CONFIG);
-	const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(
-		null
-	);
-
-	// Initialize engine once
 	const engine = useMemo(() => new TrafficEngine(256), []);
 
 	const handleConfigChange = (partial: Partial<SimConfig>) => {
@@ -32,46 +30,31 @@ export const App: React.FC = () => {
 
 	return (
 		<div style={{ display: "flex", height: "100vh", width: "100vw" }}>
-			{/* Left: Config panel */}
 			<div
 				style={{
 					width: 280,
-					backgroundColor: "#111827",
+					backgroundColor: "#1f1f1f",
 					color: "#fff",
-					borderRight: "1px solid #1f2937",
 				}}
 			>
-				<ConfigPanel
-					config={config}
-					onChange={handleConfigChange}
-					selectedVehicleId={selectedVehicleId}
-				/>
+				<ConfigPanel config={config} onChange={handleConfigChange} />
 			</div>
 
-			{/* Right: 3D Canvas */}
 			<div style={{ flex: 1, position: "relative" }}>
 				<Canvas camera={{ position: [20, 30, 20], fov: 60 }}>
-					<OrbitControls enableDamping dampingFactor={0.08} />
-					<IntersectionScene
-						engine={engine}
-						config={config}
-						selectedVehicleId={selectedVehicleId}
-						onSelectVehicle={setSelectedVehicleId}
-					/>
+					<ambientLight intensity={0.4} />
+					<directionalLight position={[20, 40, 20]} intensity={0.8} />
+
+					{/* 🔥 Restore R3F OrbitControls */}
+					<OrbitControls enableDamping dampingFactor={0.05} makeDefault />
+
+					<IntersectionScene engine={engine} config={config} />
 				</Canvas>
 
-				{config.lidarEnabled && (
-					<div
-						style={{
-							position: "absolute",
-							bottom: 16,
-							left: 16,
-						}}
-					>
-						<LidarLegend />
-					</div>
-				)}
+				{config.lidarEnabled && <LidarLegend />}
 			</div>
 		</div>
 	);
-};
+}
+
+export default App;

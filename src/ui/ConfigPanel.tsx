@@ -1,12 +1,14 @@
+// src/ui/ConfigPanel.tsx
 import React from "react";
+import type { SimConfig, ForcedLightPhase } from "../types/SceneTypes";
 import "./ConfigPanel.css";
-import type { SimConfig } from "../types/SceneTypes";
 
 interface ConfigPanelProps {
 	config: SimConfig;
-	// Accepts a partial SimConfig to merge changes
-	onChange: (newConfig: Partial<SimConfig>) => void;
+	onChange: (partial: Partial<SimConfig>) => void;
 }
+
+const formatPercent = (v: number) => `${Math.round(v * 100)}%`;
 
 export const ConfigPanel: React.FC<ConfigPanelProps> = ({
 	config,
@@ -14,83 +16,154 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
 }) => {
 	const {
 		trafficDensity,
-		pedestrianEnabled,
-		bicycleEnabled,
+		carRatio,
+		truckRatio,
+		bikeRatio,
+		pedRatio,
 		speedMultiplier,
 		lidarEnabled,
+		forceLightPhase,
 	} = config;
 
-	const handleRangeChange = (key: keyof SimConfig, value: string) => {
-		onChange({ [key]: Number(value) } as Partial<SimConfig>);
-	};
+	const handleRatioChange =
+		(key: keyof SimConfig) => (e: React.ChangeEvent<HTMLInputElement>) => {
+			onChange({ [key]: parseFloat(e.target.value) } as Partial<SimConfig>);
+		};
 
-	const handleCheckChange = (key: keyof SimConfig, checked: boolean) => {
-		onChange({ [key]: checked } as Partial<SimConfig>);
+	const handleSelectLightPhase = (e: React.ChangeEvent<HTMLSelectElement>) => {
+		onChange({ forceLightPhase: e.target.value as ForcedLightPhase });
 	};
 
 	return (
 		<div className="config-panel">
-			<h2>Simulation Control</h2>
+			<h2 className="config-title">Simulation Controls</h2>
 
-			{/* Traffic Density */}
-			<label>
-				Traffic Density: {Math.round(trafficDensity * 100)}%
+			{/* Global traffic density */}
+			<section className="config-section">
+				<div className="config-label-row">
+					<label>Traffic Density</label>
+					<span className="config-value">{formatPercent(trafficDensity)}</span>
+				</div>
 				<input
 					type="range"
-					min={0.1}
+					min={0}
 					max={1}
 					step={0.05}
 					value={trafficDensity}
-					onChange={(e) => handleRangeChange("trafficDensity", e.target.value)}
+					onChange={(e) =>
+						onChange({ trafficDensity: parseFloat(e.target.value) })
+					}
 				/>
-			</label>
+				<p className="config-help">
+					Controls overall number of entities (cars, trucks, bikes,
+					pedestrians).
+				</p>
+			</section>
 
-			{/* Speed */}
-			<label>
-				Speed Multiplier: {speedMultiplier.toFixed(1)}x
+			{/* Per-type density ratios */}
+			<section className="config-section">
+				<h3 className="config-subtitle">Type Mix (Balanced Urban)</h3>
+
+				<div className="config-label-row">
+					<label>Cars</label>
+					<span className="config-value">{formatPercent(carRatio)}</span>
+				</div>
 				<input
 					type="range"
-					min={0.5}
+					min={0}
+					max={1}
+					step={0.05}
+					value={carRatio}
+					onChange={handleRatioChange("carRatio")}
+				/>
+
+				<div className="config-label-row">
+					<label>Trucks</label>
+					<span className="config-value">{formatPercent(truckRatio)}</span>
+				</div>
+				<input
+					type="range"
+					min={0}
+					max={1}
+					step={0.05}
+					value={truckRatio}
+					onChange={handleRatioChange("truckRatio")}
+				/>
+
+				<div className="config-label-row">
+					<label>Bicycles</label>
+					<span className="config-value">{formatPercent(bikeRatio)}</span>
+				</div>
+				<input
+					type="range"
+					min={0}
+					max={1}
+					step={0.05}
+					value={bikeRatio}
+					onChange={handleRatioChange("bikeRatio")}
+				/>
+
+				<div className="config-label-row">
+					<label>Pedestrians</label>
+					<span className="config-value">{formatPercent(pedRatio)}</span>
+				</div>
+				<input
+					type="range"
+					min={0}
+					max={1}
+					step={0.05}
+					value={pedRatio}
+					onChange={handleRatioChange("pedRatio")}
+				/>
+
+				<p className="config-help">
+					Ratios are normalized internally. Set to shape the mix of road users.
+				</p>
+			</section>
+
+			{/* Speed / LIDAR */}
+			<section className="config-section">
+				<div className="config-label-row">
+					<label>Speed</label>
+					<span className="config-value">{speedMultiplier.toFixed(2)}x</span>
+				</div>
+				<input
+					type="range"
+					min={0.1}
 					max={3}
-					step={0.1}
+					step={0.05}
 					value={speedMultiplier}
-					onChange={(e) => handleRangeChange("speedMultiplier", e.target.value)}
-				/>
-			</label>
-
-			{/* Pedestrians */}
-			<label className="checkbox">
-				<input
-					type="checkbox"
-					checked={pedestrianEnabled}
 					onChange={(e) =>
-						handleCheckChange("pedestrianEnabled", e.target.checked)
+						onChange({ speedMultiplier: parseFloat(e.target.value) })
 					}
 				/>
-				Pedestrians
-			</label>
+				<label className="config-toggle">
+					<input
+						type="checkbox"
+						checked={lidarEnabled}
+						onChange={(e) => onChange({ lidarEnabled: e.target.checked })}
+					/>
+					LIDAR Overlay
+				</label>
+			</section>
 
-			{/* Bicycles */}
-			<label className="checkbox">
-				<input
-					type="checkbox"
-					checked={bicycleEnabled}
-					onChange={(e) =>
-						handleCheckChange("bicycleEnabled", e.target.checked)
-					}
-				/>
-				Bicycles
-			</label>
-
-			{/* LIDAR */}
-			<label className="checkbox">
-				<input
-					type="checkbox"
-					checked={lidarEnabled}
-					onChange={(e) => handleCheckChange("lidarEnabled", e.target.checked)}
-				/>
-				LIDAR
-			</label>
+			{/* Traffic light override */}
+			<section className="config-section">
+				<h3 className="config-subtitle">Traffic Lights</h3>
+				<label className="config-label-row">
+					<span>Override Phase</span>
+					<select value={forceLightPhase} onChange={handleSelectLightPhase}>
+						<option value="auto">Cycle (auto)</option>
+						<option value="green">Force Green NS</option>
+						<option value="yellow">Force Yellow NS</option>
+						<option value="red">Force Red NS</option>
+					</select>
+				</label>
+				<p className="config-help">
+					Override sets NS phase; EW will use the opposite so the intersection
+					remains safe.
+				</p>
+			</section>
 		</div>
 	);
 };
