@@ -21,6 +21,7 @@ const DEFAULT_CONFIG: SimConfig = {
 };
 
 function App() {
+ const [webglSupported] = useState(()=>{try { return !!document.createElement("canvas").getContext("webgl2"); } catch { return false; }});
 	const [config, setConfig] = useState<SimConfig>(DEFAULT_CONFIG);
 	const engine = useMemo(() => new TrafficEngine(256), []);
 
@@ -33,6 +34,8 @@ function App() {
 			<div
 				style={{
 					width: 280,
+ flexShrink: 0,
+ overflowY: "auto",
 					backgroundColor: "#1f1f1f",
 					color: "#fff",
 				}}
@@ -40,8 +43,8 @@ function App() {
 				<ConfigPanel config={config} onChange={handleConfigChange} />
 			</div>
 
-			<div style={{ flex: 1, position: "relative" }}>
-				<Canvas camera={{ position: [20, 30, 20], fov: 60 }}>
+			<div style={{ flex: 1, minWidth: 0, position: "relative", height:"100vh" }}>
+				{webglSupported ? <Canvas camera={{ position: [20, 30, 20], fov: 60 }}>
 					<ambientLight intensity={0.4} />
 					<directionalLight position={[20, 40, 20]} intensity={0.8} />
 
@@ -49,7 +52,7 @@ function App() {
 					<OrbitControls enableDamping dampingFactor={0.05} makeDefault />
 
 					<IntersectionScene engine={engine} config={config} />
-				</Canvas>
+				</Canvas> : <div role="status" style={{padding:"3rem",color:"#e2edd9",height:"100%",display:"grid",placeContent:"center",background:"radial-gradient(circle at center,#263e31,#101b17)"}}><h1 style={{fontSize:"2rem"}}>LiDAR Traffic Simulation</h1><p>This 3D scene requires WebGL 2.</p><p>Open this app in a browser with hardware acceleration enabled.</p><p>The simulation controls are available in the sidebar.</p></div>}
 
 				{config.lidarEnabled && <LidarLegend />}
 			</div>
