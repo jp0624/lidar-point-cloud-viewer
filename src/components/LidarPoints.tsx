@@ -1,6 +1,7 @@
 // src/components/LidarPoints.tsx
 import React, { useMemo, useRef } from "react";
 import { Points, PointMaterial } from "@react-three/drei";
+import type { Points as ThreePoints } from "three";
 import type { Entity } from "../simulation/TrafficEngine";
 import { computeLidarPoints } from "../simulation/utils";
 
@@ -13,7 +14,7 @@ export const LidarPoints: React.FC<LidarPointsProps> = ({
 	entities,
 	enabled,
 }) => {
-	const pointsRef = useRef<THREE.Points>(null);
+	const pointsRef = useRef<ThreePoints>(null);
 
 	const positions = useMemo(() => {
 		if (!enabled) return new Float32Array();

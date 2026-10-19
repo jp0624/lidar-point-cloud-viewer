@@ -1,5 +1,5 @@
 // src/components/TrafficSignal.tsx
-import React from "react";
+
 import * as THREE from "three";
 
 interface TrafficSignalProps {

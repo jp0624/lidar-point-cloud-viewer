@@ -9,7 +9,7 @@ export class PedestrianSignals {
 
 	// timing control
 	private walkTime = 4000;
-	private flashTime = 2000;
+
 
 	private nsTimer = 0;
 	private ewTimer = 0;
@@ -41,7 +41,7 @@ export class PedestrianSignals {
 	}
 
 	private updatePed(
-		dt: number,
+		_dt: number,
 		light: "green" | "yellow" | "red",
 		setPhase: (p: PedPhase) => void,
 		isWalk: () => boolean,
