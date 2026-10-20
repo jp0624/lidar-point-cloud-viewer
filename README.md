@@ -1,19 +1,22 @@
-# 📡 LIDAR Intersection Simulation
+# Lidar Point Cloud Viewer
 
-A real-time 3D traffic intersection simulator featuring vehicles, pedestrians, bicycles, synchronized traffic lights, bike lanes, sidewalks, and live LIDAR point-cloud rendering.  
-Built using **React**, **Three.js**, and **@react-three/fiber**, this system visualizes an urban intersection in motion while generating simulated LIDAR point data in real time.
+A React and Three.js intersection study with moving traffic and a synthetic point-cloud view. Use the controls to change traffic speed, add entities, pause the scene, and toggle the point cloud. The points are sampled from scene objects; they are not measurements from a physical sensor.
+
+[Live demo](https://jp-lidar-viewer.vercel.app/)
+
+The scene requires WebGL 2. If the browser cannot create a graphics context, the application shows an explanation instead of a blank canvas.
 
 ---
 
-## 🚀 Features
+## Features
 
-### 🔦 Real-Time LIDAR Point Cloud
+### Real-Time LIDAR Point Cloud
 
 - Generates LIDAR points from live scene entities (cars, trucks, bikes, pedestrians).
 - Points update every frame based on object movement and orientation.
 - Toggle LIDAR on/off using the built-in UI panel.
 
-### 🚗 Complete Traffic Simulation
+### Traffic simulation
 
 - Multi-lane intersection with 4 travel directions:
   - **NS, SN, WE, EW**
@@ -24,7 +27,7 @@ Built using **React**, **Three.js**, and **@react-three/fiber**, this system vis
   - **Pedestrians** (walk on sidewalks)
 - Vehicles are spaced to prevent collisions and maintain realistic flow.
 
-### 🚦 Fully Functional Traffic Lights
+### Traffic lights
 
 - Automatic cycle per axis:
   - **Green: 8 seconds**
@@ -32,13 +35,13 @@ Built using **React**, **Three.js**, and **@react-three/fiber**, this system vis
   - While one axis is green or yellow, the opposing axis remains red.
 - Vehicles stop before entering the intersection on red.
 
-### 🛣️ Environment Rendering
+### Environment Rendering
 
 - Paved roads, sidewalks, bike lanes, and a full intersection ground plane.
 - Daylight scene lighting (hemisphere + directional).
 - Camera orbit controls (pan/zoom/rotate).
 
-### 🧰 Dynamic Scene Editing
+### Interactive Scene Editing
 
 - Add or remove traffic entities instantly.
 - Control panel includes:
@@ -50,7 +53,7 @@ Built using **React**, **Three.js**, and **@react-three/fiber**, this system vis
 
 ---
 
-## 📘 Technical Overview
+## Technical Overview
 
 The simulation architecture is built around a few core systems:
 
@@ -123,7 +126,7 @@ The `ConfigPanel.tsx` integrates with React state to expose:
 
 ---
 
-## 🕹️ How to Use
+## How to Use
 
 ### Controls
 
@@ -143,7 +146,7 @@ The `ConfigPanel.tsx` integrates with React state to expose:
 
 ---
 
-## 📦 Installation & Running
+## Installation & Running
 
 1. Install dependencies:
 
@@ -161,7 +164,7 @@ npm run dev
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```text
 src/
@@ -182,7 +185,7 @@ src/
 
 ---
 
-## 📷 Visualization Preview
+## Visualization Preview
 
 - Vehicles move realistically through a 4-lane intersection in all directions.
 - Lights cycle automatically and control flow across NS/SN vs WE/EW.
@@ -191,7 +194,7 @@ src/
 
 ---
 
-## 🧭 Future Enhancements (Optional)
+## Future Enhancements (Optional)
 
 - Vehicle turning logic (left/right turns at the intersection)
 - Multiple interconnected intersections
@@ -202,6 +205,6 @@ src/
 
 ---
 
-## 📄 License
+## License
 
 MIT License — free for personal or commercial use.
